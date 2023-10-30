@@ -1,5 +1,6 @@
 #include<Arduino.h>
 #include "ControlMotor.h"
+#include "Signal.h"
 void stop(){
   digitalWrite(A1,0);
   digitalWrite(A2,0);

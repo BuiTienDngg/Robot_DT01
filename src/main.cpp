@@ -1,8 +1,6 @@
 #include <Arduino.h>
-#include "C:\Users\admin\Documents\PlatformIO\Projects\rx_robot\lib\ControlMotor.h"
-// #include "C:\Users\admin\Documents\PlatformIO\Projects\rx_robot\lib\Signal.h"
-// #include "C:\Users\admin\Documents\PlatformIO\Projects\rx_robot\lib\GetPID.h"
-// #include <WiFi.h>
+#include "ControlMotor.h"
+// #include "GetPID.h"
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h>
@@ -21,7 +19,13 @@ struct Signal {
   byte IO2;
 };
 Signal data;
-void in_gia_tri();
+int sensor[5];
+int P = 0, I = 0, D = 0, PID_value = 0;
+double Kp = 0.0 , Ki = 0.0, Kd = 0.0;
+int Error = 0, previousError = 0;
+int initial_motor_speed =200;
+TaskHandle_t Task1;
+TaskHandle_t Task2;
 void setup(){
   // Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
   pinMode(A1,OUTPUT);
@@ -32,11 +36,11 @@ void setup(){
   pinMode(C2,OUTPUT);
   pinMode(D1,OUTPUT);
   pinMode(D2,OUTPUT);
-  pinMode(34,INPUT);
-  pinMode(35,INPUT);
-  pinMode(36,INPUT);
-  pinMode(39,INPUT);
-  pinMode(17,INPUT);
+  pinMode(S1,INPUT);
+  pinMode(S2,INPUT);
+  pinMode(S3,INPUT);
+  pinMode(S4,INPUT);
+  pinMode(S5,INPUT);
   Serial.begin(115200);
   if (!radio.begin()) {
     Serial.println("Module không khởi động được...!!");
@@ -48,6 +52,64 @@ void setup(){
     Serial.println("CHỜ KẾT NỐI.......");
   }
   radio.startListening(); 
+  xTaskCreatePinnedToCore(
+             Task1code, /* Task function. */
+             "Task1",   /* name of task. */
+             10000,     /* Stack size of task */
+             NULL,      /* parameter of the task */
+             1,         /* priority of the task */
+             &Task1,    /* Task handle to keep track of created task */
+             0);        /* pin task to core 0 */   
+  delay(500);
+  xTaskCreatePinnedToCore(
+             Task2code,  /* Task function. */
+             "Task2",    /* name of task. */
+             10000,      /* Stack size of task */
+             NULL,       /* parameter of the task */
+             1,          /* priority of the task */
+             &Task2,     /* Task handle to keep track of created task */
+             1);         /* pin task to core 0 */   
+  delay(500);
+}
+void Task1code( void * pvParameters ){ // do line
+  sensor[0]=digitalRead(S0);
+  sensor[1]=digitalRead(S1);
+  sensor[2]=digitalRead(S2);
+  sensor[3]=digitalRead(S3);
+  sensor[4]=digitalRead(S4);
+  
+  if((sensor[0]==0)&&(sensor[1]==0)&&(sensor[2]==0)&&(sensor[4]==0)&&(sensor[4]==1))
+  Error=4;
+  else if((sensor[0]==0)&&(sensor[1]==0)&&(sensor[2]==0)&&(sensor[4]==1)&&(sensor[4]==1))
+  Error=3;
+  else if((sensor[0]==0)&&(sensor[1]==0)&&(sensor[2]==0)&&(sensor[4]==1)&&(sensor[4]==0))
+  Error=2;
+  else if((sensor[0]==0)&&(sensor[1]==0)&&(sensor[2]==1)&&(sensor[4]==1)&&(sensor[4]==0))
+  Error=1;
+  else if((sensor[0]==0)&&(sensor[1]==0)&&(sensor[2]==1)&&(sensor[4]==0)&&(sensor[4]==0))
+  Error=0;
+  else if((sensor[0]==0)&&(sensor[1]==1)&&(sensor[2]==1)&&(sensor[4]==0)&&(sensor[4]==0))
+  Error=-1;
+  else if((sensor[0]==0)&&(sensor[1]==1)&&(sensor[2]==0)&&(sensor[4]==0)&&(sensor[4]==0))
+  Error=-2;
+  else if((sensor[0]==1)&&(sensor[1]==1)&&(sensor[2]==0)&&(sensor[4]==0)&&(sensor[4]==0))
+  Error=-3;
+  else if((sensor[0]==1)&&(sensor[1]==0)&&(sensor[2]==0)&&(sensor[4]==0)&&(sensor[4]==0))
+  Error=-4;
+  else if((sensor[0]==0)&&(sensor[1]==0)&&(sensor[2]==0)&&(sensor[4]==0)&&(sensor[4]==0))
+    if(Error==-4) Error=-5;
+    else Error=5;
+}
+void Task2code( void * pvParameters ){ // calculator
+    P = Error;
+    I = I + Error;
+    D = Error - previousError;
+    PID_value = (Kp*P) + (Ki*I) + (Kd*D);
+    previousError=Error;
+    int left_motor_speed = initial_motor_speed-PID_value;
+    int right_motor_speed = initial_motor_speed+PID_value;
+    constrain(left_motor_speed,0,255);
+    constrain(right_motor_speed,0,255);
 }
 void loop(){
         // Blynk.run();
@@ -76,24 +138,6 @@ void loop(){
             
         }
 }
-
-// void sendEncoder(){
-//   radio.stopListening();// ngưng nhận để gửi encoder
-//   radio.write(&encoder, sizeof(encoder));
-//   delay(10);
-// }
-// void reset(){
-//   mode ++;
-//   encoder = 0;
-//   delay(1000);
-// }
-// void resetData() {
-//   data.throttle = 0;
-//   data.yaw = 127;
-//   data.pitch = 127;
-//   data.roll = 127;
-  
-// }
 void in_gia_tri(){
   Serial.print(data.throttle); Serial.print("     ");
   Serial.print(data.pitch); Serial.print("     ");
