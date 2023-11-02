@@ -1,14 +1,24 @@
+
 #include <Arduino.h>
-#include "ControlMotor.h"
-// #include "GetPID.h"
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h>
-int const s1 = 21;
-int const s2 = 22;
-
+#include <ESP32_Servo.h>
+Servo S1;
+Servo S2;
 const byte diachi[] = "12345";
 RF24 radio(4,5); 
+int A1 = 13;
+int A2 = 12; 
+int B2 = 14;
+int B3 = 27;
+int C1 = 22;
+int C2 = 21;
+int D1 = 33;
+int D2 = 32;
+int mode = 0;
+int mode2 = 0;
+int pos_tay_day = 0;
 struct Signal {
   byte throttle;      
   byte pitch;
@@ -17,17 +27,117 @@ struct Signal {
   byte mode;
   byte IO1;
   byte IO2;
+  byte pos1;
+  byte pos2;
 };
 Signal data;
-int sensor[5];
-int P = 0, I = 0, D = 0, PID_value = 0;
-double Kp = 0.0 , Ki = 0.0, Kd = 0.0;
-int Error = 0, previousError = 0;
-int initial_motor_speed =200;
-TaskHandle_t Task1;
-TaskHandle_t Task2;
+void in_gia_tri(){
+  Serial.print(data.throttle); Serial.print("     ");
+  Serial.print(data.pitch); Serial.print("     ");
+  Serial.print(data.roll); Serial.print("     ");
+  Serial.print(data.yaw); Serial.print("     ");
+  Serial.print(data.IO1); Serial.print("     ");
+  Serial.print(data.IO2); Serial.print("     ");
+  Serial.print(data.pos1); Serial.print("     ");
+  Serial.print(data.pos2); Serial.println("     ");
+  
+}
+void A(int direction, int speed){
+    if(direction == 1){
+      digitalWrite(A1,1);
+      digitalWrite(A2,0);
+    }else if(direction == 0){
+      digitalWrite(A1,0);
+      digitalWrite(A2,0);
+    }else{
+      digitalWrite(A1,0);
+      digitalWrite(A2,1);
+    }
+}
+void B(int direction, int speed){
+  if(direction == 1){
+    digitalWrite(B2,1);
+    digitalWrite(B3,0);
+  }else if(direction == 0){
+    digitalWrite(B2,0);
+    digitalWrite(B3,0);
+  }else{
+    digitalWrite(B2,0);
+    digitalWrite(B3,1);
+  }
+}
+void C(int direction, int speed){
+  if(direction == 1){
+    digitalWrite(C1,1);
+    digitalWrite(C2,0);
+  }else if(direction == 0){
+    digitalWrite(C1,0);
+    digitalWrite(C2,0);
+  }else{
+    digitalWrite(C1,0);
+    digitalWrite(C2,1);
+  }
+}
+void D(int direction, int speed){
+  if(direction == 1){
+    digitalWrite(D1,1);
+    digitalWrite(D2,0);
+  }else if(direction == 0){
+    digitalWrite(D1,0);
+    digitalWrite(D2,0);
+  }else{
+    digitalWrite(D1,0);
+    digitalWrite(D2,1);
+  }
+}
+//        ^
+//        |
+//        |
+//    A       B
+//    C       D
+void forward(){
+  A(1,1);
+  B(1,1);
+  C(1,1);
+  D(1,1);
+} 
+void backward(){
+  A(-1,1);
+  B(-1,1);
+  C(-1,1);
+  D(-1,1);
+}
+void stop(){
+  A(0,1);
+  B(0,1);
+  C(0,1);
+  D(0,1);
+}
+void spinLeft(){
+  A(-1,1);
+  B(1,1);
+  C(1,1);
+  D(-1,1);
+}
+void spinRight(){
+  A(1,1);
+  B(-1,1);
+  C(-1,1);
+  D(1,1);
+}
+void right(){
+  A(1,1);
+  B(-1,1);
+  C(1,1);
+  D(-1,1);
+}
+void left(){
+  A(-1,1);
+  B(1,1);
+  C(-1,1);
+  D(1,1);
+}
 void setup(){
-  // Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
   pinMode(A1,OUTPUT);
   pinMode(A2,OUTPUT);
   pinMode(B2,OUTPUT);
@@ -36,11 +146,8 @@ void setup(){
   pinMode(C2,OUTPUT);
   pinMode(D1,OUTPUT);
   pinMode(D2,OUTPUT);
-  pinMode(S1,INPUT);
-  pinMode(S2,INPUT);
-  pinMode(S3,INPUT);
-  pinMode(S4,INPUT);
-  pinMode(S5,INPUT);
+  S1.attach(2);
+  S2.attach(15);
   Serial.begin(115200);
   if (!radio.begin()) {
     Serial.println("Module không khởi động được...!!");
@@ -52,98 +159,47 @@ void setup(){
     Serial.println("CHỜ KẾT NỐI.......");
   }
   radio.startListening(); 
-  xTaskCreatePinnedToCore(
-             Task1code, /* Task function. */
-             "Task1",   /* name of task. */
-             10000,     /* Stack size of task */
-             NULL,      /* parameter of the task */
-             1,         /* priority of the task */
-             &Task1,    /* Task handle to keep track of created task */
-             0);        /* pin task to core 0 */   
-  delay(500);
-  xTaskCreatePinnedToCore(
-             Task2code,  /* Task function. */
-             "Task2",    /* name of task. */
-             10000,      /* Stack size of task */
-             NULL,       /* parameter of the task */
-             1,          /* priority of the task */
-             &Task2,     /* Task handle to keep track of created task */
-             1);         /* pin task to core 0 */   
-  delay(500);
 }
-void Task1code( void * pvParameters ){ // do line
-  sensor[0]=digitalRead(S0);
-  sensor[1]=digitalRead(S1);
-  sensor[2]=digitalRead(S2);
-  sensor[3]=digitalRead(S3);
-  sensor[4]=digitalRead(S4);
-  
-  if((sensor[0]==0)&&(sensor[1]==0)&&(sensor[2]==0)&&(sensor[4]==0)&&(sensor[4]==1))
-  Error=4;
-  else if((sensor[0]==0)&&(sensor[1]==0)&&(sensor[2]==0)&&(sensor[4]==1)&&(sensor[4]==1))
-  Error=3;
-  else if((sensor[0]==0)&&(sensor[1]==0)&&(sensor[2]==0)&&(sensor[4]==1)&&(sensor[4]==0))
-  Error=2;
-  else if((sensor[0]==0)&&(sensor[1]==0)&&(sensor[2]==1)&&(sensor[4]==1)&&(sensor[4]==0))
-  Error=1;
-  else if((sensor[0]==0)&&(sensor[1]==0)&&(sensor[2]==1)&&(sensor[4]==0)&&(sensor[4]==0))
-  Error=0;
-  else if((sensor[0]==0)&&(sensor[1]==1)&&(sensor[2]==1)&&(sensor[4]==0)&&(sensor[4]==0))
-  Error=-1;
-  else if((sensor[0]==0)&&(sensor[1]==1)&&(sensor[2]==0)&&(sensor[4]==0)&&(sensor[4]==0))
-  Error=-2;
-  else if((sensor[0]==1)&&(sensor[1]==1)&&(sensor[2]==0)&&(sensor[4]==0)&&(sensor[4]==0))
-  Error=-3;
-  else if((sensor[0]==1)&&(sensor[1]==0)&&(sensor[2]==0)&&(sensor[4]==0)&&(sensor[4]==0))
-  Error=-4;
-  else if((sensor[0]==0)&&(sensor[1]==0)&&(sensor[2]==0)&&(sensor[4]==0)&&(sensor[4]==0))
-    if(Error==-4) Error=-5;
-    else Error=5;
-}
-void Task2code( void * pvParameters ){ // calculator
-    P = Error;
-    I = I + Error;
-    D = Error - previousError;
-    PID_value = (Kp*P) + (Ki*I) + (Kd*D);
-    previousError=Error;
-    int left_motor_speed = initial_motor_speed-PID_value;
-    int right_motor_speed = initial_motor_speed+PID_value;
-    constrain(left_motor_speed,0,255);
-    constrain(right_motor_speed,0,255);
-}
-void loop(){
-        // Blynk.run();
+// pos thả bóng 70;
+// pos gắp 255;
+// pó thả không 0
+// pos thả 1 51
+// pos thả 2 120
+// pos thả 3 200
+
+void loop(){  
+         
+        if(radio.available()){
+          // thror  pitch roll yaw
         radio.read(&data, sizeof(Signal));
-        if(data.pitch > 200 && data.roll > 100 && data.roll < 180 ) forWard();
-        else if(data.pitch < 80 && data.roll > 100 && data.roll < 180) backWard();
-        else if(data.roll > 200 && data.pitch > 100 && data.pitch < 180) left();
-        else if(data.roll < 50 && data.pitch > 100 && data.pitch < 180) right();
-        else if(data.yaw < 10) spinLeft();
-        else if(data.yaw > 230) spinRight();
+        if(data.pitch > 160)forward();
+        else if(data.pitch < 80) backward();
+        else if(data.roll > 200 ) spinRight();
+        else if(data.roll < 50 ) spinLeft();
+        else if(data.yaw <= 10) right();
+        else if(data.yaw >= 245) left();
         else stop();
-        // in_gia_tri();
-        if(data.IO1 == 1){ // nút nhấn thứ 1
-            delay(1300);
-            radio.read(&data, sizeof(Signal));
-            spinLeft();
-            delay(800);
-            Serial.println("hihi");          
+        if(data.IO1 == 1){
+          while(data.IO1 == 1) radio.read(&data, sizeof(Signal));
+          mode = 0;
+          delay(300);
         }
-        if(data.IO2 == 1){ // nút nhấn thứ 2
-            delay(1300);
-            radio.read(&data, sizeof(Signal));
-            spinRight();
-            delay(800);
-            Serial.println("hihi");
-            
+        if(data.throttle > 100 && data.throttle < 200 && data.yaw > 100 && data.yaw < 200) S1.write(60);
+        else if(data.throttle > 220 && data.yaw > 100 && data.yaw < 200) S1.write(180);
+        else if(data.throttle < 100 && data.yaw > 100 && data.yaw < 200){
+          delay(200);
+          while(data.throttle < 100)radio.read(&data, sizeof(Signal));
+          mode++;
         }
-}
-void in_gia_tri(){
-  Serial.print(data.throttle); Serial.print("     ");
-  Serial.print(data.pitch); Serial.print("     ");
-  Serial.print(data.roll); Serial.print("     ");
-  Serial.print(data.yaw); Serial.print("     ");
-  Serial.print(data.IO1); Serial.print("     ");
-  Serial.print(data.IO2); Serial.println("     ");
-  
+        if(mode % 4 == 0){
+          S2.write(0);
+        }else if(mode % 4 == 1){
+          S2.write(51);
+        }else if(mode % 4 == 2){
+          S2.write(120);
+        }else if(mode % 4 == 3){
+          S2.write(200);
+        }
+        in_gia_tri();
+        }   
 }
