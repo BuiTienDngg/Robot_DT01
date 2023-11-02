@@ -19,6 +19,12 @@ int D2 = 32;
 int mode = 0;
 int mode2 = 0;
 int pos_tay_day = 0;
+int pwmA  = 16;
+int pwmB  = 17;
+int pwmC  = 1;
+int pwmD  = 3;
+bool isFast = true;
+bool isGap = false;
 struct Signal {
   byte throttle;      
   byte pitch;
@@ -27,8 +33,8 @@ struct Signal {
   byte mode;
   byte IO1;
   byte IO2;
-  byte pos1;
-  byte pos2;
+  byte isSpeed;
+  
 };
 Signal data;
 void in_gia_tri(){
@@ -38,9 +44,13 @@ void in_gia_tri(){
   Serial.print(data.yaw); Serial.print("     ");
   Serial.print(data.IO1); Serial.print("     ");
   Serial.print(data.IO2); Serial.print("     ");
-  Serial.print(data.pos1); Serial.print("     ");
-  Serial.print(data.pos2); Serial.println("     ");
+  Serial.print(data.isSpeed); Serial.println("     ");
   
+}
+void setPWM(int speed){
+  analogWrite(pwmA,speed);
+  Serial.print("speed = ");
+  Serial.println(speed);  
 }
 void A(int direction, int speed){
     if(direction == 1){
@@ -79,6 +89,7 @@ void C(int direction, int speed){
   }
 }
 void D(int direction, int speed){
+  
   if(direction == 1){
     digitalWrite(D1,1);
     digitalWrite(D2,0);
@@ -90,11 +101,6 @@ void D(int direction, int speed){
     digitalWrite(D2,1);
   }
 }
-//        ^
-//        |
-//        |
-//    A       B
-//    C       D
 void forward(){
   A(1,1);
   B(1,1);
@@ -171,26 +177,28 @@ void loop(){
          
         if(radio.available()){
           // thror  pitch roll yaw
-        radio.read(&data, sizeof(Signal));
-        if(data.pitch > 160)forward();
-        else if(data.pitch < 80) backward();
-        else if(data.roll > 200 ) spinRight();
-        else if(data.roll < 50 ) spinLeft();
-        else if(data.yaw <= 10) right();
-        else if(data.yaw >= 245) left();
-        else stop();
-        if(data.IO1 == 1){
-          while(data.IO1 == 1) radio.read(&data, sizeof(Signal));
-          mode = 0;
-          delay(300);
-        }
-        if(data.throttle > 100 && data.throttle < 200 && data.yaw > 100 && data.yaw < 200) S1.write(60);
-        else if(data.throttle > 220 && data.yaw > 100 && data.yaw < 200) S1.write(180);
-        else if(data.throttle < 100 && data.yaw > 100 && data.yaw < 200){
-          delay(200);
-          while(data.throttle < 100)radio.read(&data, sizeof(Signal));
-          mode++;
-        }
+            
+            radio.read(&data, sizeof(Signal));
+            if(data.pitch > 160)forward();
+            else if(data.pitch < 80) backward();
+            else if(data.roll > 200 ) spinRight();
+            else if(data.roll < 50 ) spinLeft();
+            else if(data.yaw <= 10) right();
+            else if(data.yaw >= 245) left();
+            else stop();
+              if(data.IO2 == 1){
+                delay(200);
+                while(data.IO2 == 1) radio.read(&data,sizeof(Signal));
+                isGap = !isGap;
+              }
+              if(data.IO1 == 1){
+                delay(200);
+                  while(data.IO1 == 1) radio.read(&data, sizeof(Signal));
+                  mode++;
+                  delay(300);
+              }
+              if(data.isSpeed == 1) setPWM(255);
+              else setPWM(100);
         if(mode % 4 == 0){
           S2.write(0);
         }else if(mode % 4 == 1){
@@ -200,6 +208,9 @@ void loop(){
         }else if(mode % 4 == 3){
           S2.write(200);
         }
+        if(isGap) S1.write(180);
+        else S1.write(50);
         in_gia_tri();
         }   
+        
 }
